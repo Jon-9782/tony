@@ -1116,8 +1116,8 @@ const TONY_FAMILY = [];</script>
     if (!fromCircle && famKeys().length && (S.nextReward === 'video' || gotAll)) {
       S.nextReward = 'sticker'; save(); renderStars();
       fresh(); move('jump'); sfx.cheer();
-      await playFamilyVideo();
-      return;
+      if (await playFamilyVideo()) return;
+      S.nextReward = 'video';
     }
     if (!fromCircle) S.nextReward = 'video';
     const all = C.stickers.map((_, i) => i), left = all.filter(i => !S.stickers.includes(i));
@@ -1986,7 +1986,7 @@ const TONY_FAMILY = [];</script>
   const famLabel = k => k.slice(7).split('|')[0] || 'Your family';
   let lastFam = null;
   function playFamilyVideo() {
-    const keys = famKeys(); if (!keys.length) return Promise.resolve();
+    const keys = famKeys(); if (!keys.length) return Promise.resolve(false);
     let k = pick(keys); if (keys.length > 1) while (k === lastFam) k = pick(keys);
     lastFam = k;
     stopSong();
@@ -1995,8 +1995,10 @@ const TONY_FAMILY = [];</script>
     return new Promise(res => {
       let done = false;
       const v = $('#famVid');
-      const close = () => { if (done) return; done = true; try { v.pause(); } catch {} rewardEl.hidden = true; res(); };
+      let ok = true;
+      const close = () => { if (done) return; done = true; try { v.pause(); } catch {} rewardEl.hidden = true; res(ok); };
       v.addEventListener('ended', () => setTimeout(close, 700));
+      v.addEventListener('error', () => { ok = false; close(); });
       $('#famOk').addEventListener('click', close);
       $('#famSnd').addEventListener('click', () => { v.muted = false; v.currentTime = 0; v.play().catch(() => {}); $('#famSnd').hidden = true; });
       v.muted = !S.sound;
@@ -2482,12 +2484,11 @@ const TONY_FAMILY = [];</script>
   // boot
   renderStars(); renderCount(); setHat(S.hat);
   go(S.napUntil > Date.now() ? 'nap' : 'home');
-  Media.init().then(() => {
-    // family videos bundled into this copy of the app
-    (typeof TONY_FAMILY !== 'undefined' ? TONY_FAMILY : []).forEach((v, i) => {
-      try { Media.addMem('family:' + v.label + '|builtin-' + i, new Blob([b64buf(v.data)], { type: 'video/mp4' })); } catch {}
-    });
+  // family videos bundled into this copy of the app
+  (typeof TONY_FAMILY !== 'undefined' ? TONY_FAMILY : []).forEach((v, i) => {
+    try { Media.addMem('family:' + v.label + '|builtin-' + i, new Blob([b64buf(v.data)], { type: 'video/mp4' })); } catch {}
   });
+  Media.init();
   caption('Hi Kade! Tap me!');
   setTimeout(() => { ctx(); Object.keys(AUD).forEach(loadClip); }, 400);
   window.__tony = { go, S, screens };
