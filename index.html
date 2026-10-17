@@ -1499,24 +1499,38 @@ const TONY_AUDIO = {"ANN_bee": "SUQzBAAAAAAAI1RTU0UAAAAPAAADTGF2ZjYwLjE2LjEwMAAA
         return true;
       },
     };
+    // Three lanes, one bubble per lane: never more than 3 on screen and never overlapping.
+    const MAX = 3;
     function newTarget(speak = true) {
       let t; do { t = pick(LETTERS); } while (t === target);
       target = t; hits = 0; locked = false;
       $('#bbT').textContent = target;
       $$('#dots i').forEach(d => d.classList.remove('on'));
       bubbles.forEach(b => { if (!b.dead) b.el.remove(); }); bubbles = [];
-      for (let i = 0; i < 6; i++) spawn(true);
+      const heights = shuffle([.82, .55, .28]);
+      const lanes = shuffle([0, 1, 2]);
+      const tLane = lanes[0];
+      lanes.forEach((ln, i) => spawn(ln, heights[i], ln === tLane));
+      spawnT = 1.4;
       if (speak) say('PB_' + target);
     }
-    function spawn(initial) {
+    const alive = () => bubbles.filter(b => !b.dead);
+    function geo() {
+      const W = area.clientWidth, H = area.clientHeight, laneW = W / MAX;
+      const r = Math.max(34, Math.min(68, laneW / 2 - 10, H / 6));
+      return { W, H, laneW, r, wob: Math.max(0, Math.min(14, laneW / 2 - r - 4)) };
+    }
+    function spawn(lane, startFrac, forceTarget) {
       if (!area) return;
-      const W = area.clientWidth, H = area.clientHeight;
-      const r = 42 + Math.random() * 26;
-      const L = Math.random() < .45 ? target : pick(LETTERS);
+      const { H, laneW, r } = geo();
+      const onScreen = alive().map(b => b.L);
+      let L;
+      if (forceTarget || !onScreen.includes(target) || Math.random() < .4) L = target;
+      else L = pick(LETTERS.filter(x => x !== target && !onScreen.includes(x)));
       const el = document.createElement('button');
       el.className = 'bbl'; el.textContent = L; el.setAttribute('aria-label', 'Bubble ' + L);
-      el.style.width = el.style.height = (r * 2) + 'px'; el.style.fontSize = (r * .95) + 'px';
-      const b = { el, L, r, x: r + Math.random() * Math.max(1, W - 2 * r), y: initial ? H * (.35 + Math.random() * .6) : H + r, sp: 38 + Math.random() * 34, ph: Math.random() * 6.28, dead: false };
+      el.style.width = el.style.height = (r * 2) + 'px'; el.style.fontSize = (r * 1.0) + 'px';
+      const b = { el, L, r, lane, x: laneW * (lane + .5), y: startFrac == null ? H + r : H * startFrac, sp: 30 + Math.random() * 16, ph: Math.random() * 6.28, dead: false };
       el.addEventListener('pointerdown', ev => { ev.preventDefault(); popB(b); });
       area.appendChild(el); bubbles.push(b);
     }
@@ -1537,13 +1551,19 @@ const TONY_AUDIO = {"ANN_bee": "SUQzBAAAAAAAI1RTU0UAAAAPAAADTGF2ZjYwLjE2LjEwMAAA
     function loop(t) {
       const dt = Math.min(.05, (t - lastT) / 1000); lastT = t;
       if (area && area.isConnected) {
-        const W = area.clientWidth;
+        const { laneW, r, wob } = geo();
         spawnT -= dt;
-        if (spawnT <= 0 && bubbles.filter(b => !b.dead).length < 11) { spawn(false); spawnT = .5 + Math.random() * .45; }
+        const live = alive();
+        if (!live.some(b => b.L === target) && spawnT > .25) spawnT = .25;
+        if (spawnT <= 0 && live.length < MAX) {
+          const free = [0, 1, 2].filter(ln => !live.some(b => b.lane === ln));
+          if (free.length) { spawn(pick(free), null, false); spawnT = 1.2 + Math.random() * .8; }
+        }
         for (const b of bubbles) {
           if (b.dead) continue;
-          b.y -= b.sp * dt; b.ph += dt * 1.6;
-          const x = Math.min(W - b.r, Math.max(b.r, b.x + Math.sin(b.ph) * 18));
+          b.y -= b.sp * dt; b.ph += dt * 1.4;
+          if (b.r !== r) { b.r = r; b.el.style.width = b.el.style.height = (r * 2) + 'px'; b.el.style.fontSize = r + 'px'; }
+          const x = laneW * (b.lane + .5) + Math.sin(b.ph) * wob;
           b.el.style.transform = `translate(${(x - b.r).toFixed(1)}px, ${(b.y - b.r).toFixed(1)}px)`;
           if (b.y < -b.r) { b.dead = true; b.el.remove(); }
         }
